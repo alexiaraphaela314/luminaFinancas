@@ -1,11 +1,29 @@
-categoria,frases
-Segurança,Perda ou roubo
-Cartão,Quero desbloquear meu cartão de crédito
-Faturamento,Consultar valor da minha fatura
-Crédito,Pedir uma análise de crédito
-Cartão,Pedir meu cartão de crédito
-Investimento,Quero investir na poupança
-Investimento,Quero investir no CDB mais crédito
-Extrato,Quero meu extrato do mês
-Faturamento,Quero a 2° via da minha fatura
-Atendimento,Quero falar com um atendente
+frases,categoria
+qual o meu limite,Cartão
+meu limite do cartao,Cartão
+limite disponivel,Cartão
+quanto posso gastar,Cartão
+limite,Cartão
+quero saber o limite,Cartão
+qual o limite do meu cartao,Cartão
+meu cartao tem limite,Cartão
+qual o valor da minha fatura,Faturamento
+valor do boleto,Faturamento
+quanto devo pagar,Faturamento
+minha fatura,Faturamento
+fatura,Faturamento
+quero o boleto,Faturamento
+qual meu saldo,Extrato
+quanto tenho na conta,Extrato
+meu extrato,Extrato
+saldo atual,Extrato
+saldo,Extrato
+dinheiro em conta,Extrato
+tenho emprestimo,Emprestimo
+posso pegar dinheiro,Emprestimo
+credito disponivel,Emprestimo
+emprestimo,Emprestimo
+qual minha conta,Conta
+numero da agencia,Conta
+meus dados bancarios,Conta
+agencia e conta,Conta

@@ -4,15 +4,19 @@ import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 
-# Configuração da página Web
-st.set_page_config(page_title="Lumina Finanças", page_icon="🏦")
+# Configuração da página padrão MYCARD
+st.set_page_config(page_title="MYCARD Atendimento", page_icon="💳")
 
-# --- 1. TREINAMENTO DA IA (MESMA LÓGICA ANTERIOR) ---
+# --- 1. TREINAMENTO DA IA (Reestruturado para Normalização) ---
 @st.cache_resource
 def treinar_modelo():
     try:
+        # Carrega o perguntas.csv garantindo que não existam espaços nos nomes das colunas
         perguntas = pd.read_csv("perguntas.csv", skipinitialspace=True)
-        frases = perguntas["frases"].astype(str).tolist()
+        
+        # NORMALIZAÇÃO: Convertemos as frases de treino para minúsculas
+        # Isso ensina a IA a ignorar se o usuário escreve com Shift ou Caps Lock
+        frases = perguntas["frases"].astype(str).str.lower().tolist()
         categorias = perguntas["categoria"].astype(str).tolist()
         
         vetorizador = CountVectorizer()
@@ -26,76 +30,93 @@ def treinar_modelo():
 
 vetorizador, modelo = treinar_modelo()
 
-# --- 2. FUNÇÃO DO BANCO DE DADOS ---
+# --- 2. BUSCA NO BANCO DE DADOS ---
 def buscar_cliente(cpf):
     try:
         with sqlite3.connect('luminaFinanças.db') as conn:
+            conn.row_factory = sqlite3.Row  # Crucial para acessar dados pelo nome da coluna
             cursor = conn.cursor()
-            cursor.execute('SELECT nome, fatura, saldo, limite FROM clientes WHERE cpf = ?', (cpf,))
-            return cursor.fetchone()
+            # CPF no seu banco é INTEGER, por isso convertemos o input
+            cursor.execute('SELECT * FROM clientes WHERE cpf = ?', (int(cpf),))
+            resultado = cursor.fetchone()
+            return dict(resultado) if resultado else None
     except Exception:
         return None
 
-# --- 3. INTERFACE (SIDEBAR / LOGIN) ---
-st.sidebar.title("🏦 Lumina Finanças")
-cpf_raw = st.sidebar.text_input("Digite seu CPF para acessar:", placeholder="000.000.000-00")
+# --- 3. INTERFACE VISUAL ---
+st.markdown("<h1 style='text-align: center;'>Operadora de cartão de crédito MYCARD</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Atendimento virtual para clientes</p>", unsafe_allow_html=True)
 
-# LIMPEZA: Remove pontos e traços caso o usuário digite
-# Isso garante que '123.456.789-01' vire '12345678901'
-cpf_limpo = cpf_raw.replace(".", "").replace("-", "").strip()
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "Olá! Digite seu CPF para iniciar o atendimento."}]
+if "cliente_logado" not in st.session_state:
+    st.session_state.cliente_logado = None
 
-# Agora fazemos a busca usando a variável limpa
-cliente = buscar_cliente(cpf_limpo)
+# Botão Limpar Conversa
+col1, col2 = st.columns([5, 1])
+with col2:
+    if st.button("Limpar conversa"):
+        st.session_state.messages = [{"role": "assistant", "content": "Olá! Digite seu CPF para iniciar o atendimento."}]
+        st.session_state.cliente_logado = None
+        st.rerun()
 
-if cliente:
-    nome, fatura, saldo, limite = cliente
-    st.sidebar.success(f"Conectado como: {nome}")
-    st.sidebar.metric("Saldo em Conta", f"R$ {saldo:.2f}")
-    st.sidebar.metric("Limite Disponível", f"R$ {limite:.2f}")
-    
-    # --- 4. LÓGICA DO CHAT ---
-    st.title("Assistente Virtual Lumina")
-    
-    # Inicializa o histórico do chat na sessão web
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Renderização do histórico
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    # Exibe as mensagens do histórico
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# --- 4. FLUXO DE CONVERSA ---
+if prompt := st.chat_input("Digite aqui..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-    # Campo de entrada do chat
-    if prompt := st.chat_input("Como posso ajudar hoje?"):
-        # Adiciona mensagem do usuário ao histórico
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Processamento da IA
-        pergunta_vet = vetorizador.transform([prompt.lower()])
-        probs = modelo.predict_proba(pergunta_vet)[0]
-        confianca = max(probs)
-        categoria = modelo.predict(pergunta_vet)[0]
-
-        # Resposta do Bot
-        with st.chat_message("assistant"):
-            if confianca > 0.55: # Filtro de estabilidade
-                if categoria == "Faturamento":
-                    resposta = f"Sua fatura atual é de R$ {fatura:.2f}."
-                elif categoria == "Extrato":
-                    resposta = f"O saldo atual da sua conta é R$ {saldo:.2f}."
-                elif categoria == "Cartão":
-                    遭到 = f"Seu limite total de crédito é R$ {limite:.2f}."
-                elif categoria == "Investimento":
-                    resposta = f"Vi aqui que você tem R$ {saldo:.2f} para investir. Qual modalidade prefere?"
-                else:
-                    resposta = "Entendi seu interesse, mas ainda estou aprendendo sobre esse assunto."
-            else:
-                resposta = "Desculpe, não entendi. Pode repetir? Tente algo sobre saldo ou fatura."
+    # LOGIN: Identificação por CPF
+    if st.session_state.cliente_logado is None:
+        cpf_limpo = "".join(filter(str.isdigit, prompt)) # Pega só os números
+        cliente = buscar_cliente(cpf_limpo)
+        
+        if cliente:
+            st.session_state.cliente_logado = cliente
+            nome_cli = cliente['nome'].split()[0]
+            resposta = f"Olá, {nome_cli}! No que posso te ajudar?"
+        else:
+            resposta = "CPF não encontrado. Digite apenas os números do seu CPF para logar."
             
+        st.session_state.messages.append({"role": "assistant", "content": resposta})
+        with st.chat_message("assistant"):
             st.markdown(resposta)
-            st.session_state.messages.append({"role": "assistant", "content": resposta})
-
-else:
-    st.info("Aguardando acesso... Insira um CPF válido na barra lateral.")
+    
+    # ATENDIMENTO: Respostas baseadas na IA e no Banco
+    else:
+        dados = st.session_state.cliente_logado
+        nome = dados['nome'].split()[0]
+        
+        # NORMALIZAÇÃO DO INPUT: Transforma a fala do usuário em minúscula
+        # Isso resolve o problema de "Cartão" vs "cartao" do seu print
+        prompt_normalizado = prompt.lower().strip()
+        
+        # IA decide a categoria
+        pergunta_vet = vetorizador.transform([prompt_normalizado])
+        categoria = modelo.predict(pergunta_vet)[0]
+        
+        # Mapeamento das respostas com as colunas corretas do SQL
+        if categoria == "Cartão":
+            # Aqui buscamos explicitamente a coluna 'limite'
+            resposta = f"{nome}, o seu limite disponível no cartão é R$ {dados['limite']:.2f}."
+        elif categoria == "Extrato":
+            # Aqui buscamos explicitamente a coluna 'saldo'[cite: 2, 3]
+            resposta = f"{nome}, seu saldo atual em conta é de R$ {dados['saldo']:.2f}."
+        elif categoria == "Faturamento":
+            resposta = f"{nome}, sua fatura atual é de R$ {dados['fatura']:.2f}."
+        elif categoria == "Emprestimo":
+            status = "disponível" if dados['emprestimo'] == 1 else "indisponível"
+            resposta = f"{nome}, o serviço de empréstimo está {status} para o seu perfil."
+        elif categoria == "Conta":
+            resposta = f"Dados bancários: Agência {dados['num_agencia']} | Conta {dados['num_conta']}."
+        else:
+            resposta = f"Ainda estou aprendendo sobre isso, {nome}. Tente perguntar sobre saldo, limite ou fatura."
+            
+        st.session_state.messages.append({"role": "assistant", "content": resposta})
+        with st.chat_message("assistant"):
+            st.markdown(resposta)
